@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { View, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { AuthProvider } from '../context/AuthContext';
 
 import LoginScreen from '../screens/Auth/LoginScreen';
 import RegisterScreen from '../screens/Auth/RegisterScreen';
@@ -22,10 +23,21 @@ import ChatDetailScreen from '../screens/Communication/ChatDetailScreen';
 import CheckoutScreen from '../screens/Checkout/CheckoutScreen';
 import OrderTrackingScreen from '../screens/Orders/OrderTrackingScreen';
 
+// Import Inspector screens
+import InspectorDashboardScreen from '../screens/Inspector/InspectorDashboardScreen';
+import InspectionRequestsScreen from '../screens/Inspector/InspectionRequestsScreen';
+import InspectionDetailScreen from '../screens/Inspector/InspectionDetailScreen';
+import PerformInspectionScreen from '../screens/Inspector/PerformInspectionScreen';
+import InspectionHistoryScreen from '../screens/Inspector/InspectionHistoryScreen';
+import DisputeResolutionScreen from '../screens/Inspector/DisputeResolutionScreen';
+import EarningsScreen from '../screens/Inspector/EarningsScreen';
+import InspectorProfileScreen from '../screens/Inspector/InspectorProfileScreen';
+
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
-function MainTabNavigator() {
+// Tab Navigator cho Buyer/Seller
+function BuyerTabNavigator() {
     return (
         <Tab.Navigator
             screenOptions={({ route }) => ({
@@ -57,22 +69,102 @@ function MainTabNavigator() {
     );
 }
 
+// Tab Navigator cho Inspector
+function InspectorTabNavigator() {
+    return (
+        <Tab.Navigator
+            screenOptions={({ route }) => ({
+                tabBarIcon: ({ focused, color, size }) => {
+                    let iconName;
+
+                    if (route.name === 'Dashboard') {
+                        iconName = focused ? 'speedometer' : 'speedometer-outline';
+                    } else if (route.name === 'Requests') {
+                        iconName = focused ? 'list' : 'list-outline';
+                    } else if (route.name === 'History') {
+                        iconName = focused ? 'time' : 'time-outline';
+                    } else if (route.name === 'Earnings') {
+                        iconName = focused ? 'wallet' : 'wallet-outline';
+                    } else if (route.name === 'InspectorProfile') {
+                        iconName = focused ? 'person' : 'person-outline';
+                    }
+
+                    return <Ionicons name={iconName} size={size} color={color} />;
+                },
+                tabBarActiveTintColor: COLORS.primary,
+                tabBarInactiveTintColor: COLORS.secondary,
+                headerShown: false,
+            })}
+        >
+            <Tab.Screen 
+                name="Dashboard" 
+                component={InspectorDashboardScreen}
+                options={{ tabBarLabel: 'Tổng quan' }}
+            />
+            <Tab.Screen 
+                name="Requests" 
+                component={InspectionRequestsScreen}
+                options={{ tabBarLabel: 'Yêu cầu' }}
+            />
+            <Tab.Screen 
+                name="History" 
+                component={InspectionHistoryScreen}
+                options={{ tabBarLabel: 'Lịch sử' }}
+            />
+            <Tab.Screen 
+                name="Earnings" 
+                component={EarningsScreen}
+                options={{ tabBarLabel: 'Thu nhập' }}
+            />
+            <Tab.Screen 
+                name="InspectorProfile" 
+                component={InspectorProfileScreen}
+                options={{ tabBarLabel: 'Hồ sơ' }}
+            />
+        </Tab.Navigator>
+    );
+}
+
+function AppNavigatorContent() {
+    return (
+        <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Welcome">
+            {/* Auth Screens */}
+            <Stack.Screen name="Welcome" component={WelcomeScreen} />
+            <Stack.Screen name="Login" component={LoginScreen} />
+            <Stack.Screen name="Register" component={RegisterScreen} />
+            
+            {/* Buyer/Seller Main Screens */}
+            <Stack.Screen name="BuyerMain" component={BuyerTabNavigator} />
+            <Stack.Screen name="ProductDetail" component={ProductDetailScreen} />
+            <Stack.Screen name="CompareBikes" component={CompareBikesScreen} />
+            <Stack.Screen name="Filters" component={FiltersScreen} />
+            <Stack.Screen name="Checkout" component={CheckoutScreen} />
+            <Stack.Screen name="OrderTracking" component={OrderTrackingScreen} />
+            <Stack.Screen name="ChatList" component={ChatListScreen} />
+            <Stack.Screen name="ChatDetail" component={ChatDetailScreen} />
+            
+            {/* Inspector Main Screens */}
+            <Stack.Screen name="InspectorMain" component={InspectorTabNavigator} />
+            <Stack.Screen name="InspectionDetail" component={InspectionDetailScreen} />
+            <Stack.Screen name="PerformInspection" component={PerformInspectionScreen} />
+            <Stack.Screen name="DisputeResolution" component={DisputeResolutionScreen} />
+            
+            {/* Legacy support - redirect to BuyerMain */}
+            <Stack.Screen 
+                name="Main" 
+                component={BuyerTabNavigator}
+                options={{ headerShown: false }}
+            />
+        </Stack.Navigator>
+    );
+}
+
 export default function AppNavigator() {
     return (
-        <NavigationContainer>
-            <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Welcome">
-                <Stack.Screen name="Welcome" component={WelcomeScreen} />
-                <Stack.Screen name="Login" component={LoginScreen} />
-                <Stack.Screen name="Register" component={RegisterScreen} />
-                <Stack.Screen name="Main" component={MainTabNavigator} />
-                <Stack.Screen name="ProductDetail" component={ProductDetailScreen} />
-                <Stack.Screen name="CompareBikes" component={CompareBikesScreen} />
-                <Stack.Screen name="Filters" component={FiltersScreen} />
-                <Stack.Screen name="Checkout" component={CheckoutScreen} />
-                <Stack.Screen name="OrderTracking" component={OrderTrackingScreen} />
-                <Stack.Screen name="ChatList" component={ChatListScreen} />
-                <Stack.Screen name="ChatDetail" component={ChatDetailScreen} />
-            </Stack.Navigator>
-        </NavigationContainer>
+        <AuthProvider>
+            <NavigationContainer>
+                <AppNavigatorContent />
+            </NavigationContainer>
+        </AuthProvider>
     );
 }

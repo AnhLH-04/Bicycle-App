@@ -10,5 +10,8 @@ export const COLORS = {
     error: '#ef4444',
     success: '#22c55e',
     warning: '#f59e0b',
-    gray: '#f1f5f9',
+    gray: '#94a3b8', // Changed to darker gray for text visibility
+    dark: '#1e293b', // Added for dark text (same as text)
+    white: '#ffffff', // Added for white backgrounds
+    lightGray: '#f1f5f9', // Added for light backgrounds
 };

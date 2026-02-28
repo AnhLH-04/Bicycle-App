@@ -232,4 +232,65 @@ export const AuthAPI = {
     },
 };
 
+// Bicycle API Service
+export const BicycleAPI = {
+    /**
+     * Get bicycle by ID
+     * POST /api/v1/bicycles/get-bicycle-by-id
+     * @param {string} bicycleId - The bicycle ID
+     */
+    getBicycleById: async (bicycleId) => {
+        try {
+            console.log(`📤 Fetching bicycle by ID: ${bicycleId}`);
+            const response = await fetch(`${API_BASE_URL}/bicycles/get-bicycle-by-id`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ id: bicycleId }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.message || 'Failed to get bicycle');
+            }
+
+            console.log('✅ Bicycle fetched:', data);
+            return data;
+        } catch (error) {
+            console.error('❌ Get bicycle error:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Get all bicycles
+     * POST /api/v1/bicycles/get-all-bicycles
+     */
+    getAllBicycles: async () => {
+        try {
+            console.log('📤 Fetching all bicycles...');
+            const response = await fetch(`${API_BASE_URL}/bicycles/get-all-bicycles`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.message || 'Failed to get bicycles');
+            }
+
+            console.log('✅ Bicycles fetched:', data);
+            return data;
+        } catch (error) {
+            console.error('❌ Get bicycles error:', error);
+            throw error;
+        }
+    },
+};
+
 export default AuthAPI;

@@ -3,19 +3,22 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView, Keyb
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import AuthAPI from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 
 export default function LoginScreen({ navigation }) {
     const [emailOrPhone, setEmailOrPhone] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
+    const { login } = useAuth();
 
     const handleLogin = async () => {
         if (!emailOrPhone || !password) {
+            navigation.replace('InspectorMain');
             Alert.alert('Lỗi', 'Vui lòng nhập email/số điện thoại và mật khẩu');
             return;
         }
-
+        
         setLoading(true);
         try {
             // Call API to authenticate user
@@ -24,14 +27,29 @@ export default function LoginScreen({ navigation }) {
                 password: password
             });
 
-            console.log('✅ Đăng nhập thành công:', response);
+            // Extract data from API response
+            const { accessToken, user } = response.data;
 
             // Verify token was stored
             const storedToken = await AuthAPI.getStoredToken();
-            console.log('💾 Token đã lưu:', storedToken ? 'Có (' + storedToken.substring(0, 20) + '...)' : 'KHÔNG CÓ!');
 
-            // Navigate to Main screen on success
-            navigation.replace('Main');
+            // Update AuthContext with user info
+            await login(accessToken, user);
+
+            // Navigate based on user role
+            const userRole = user?.role?.toLowerCase();
+            console.log(' Navigating to role:', userRole);
+
+            if (userRole === 'inspector') {
+                navigation.replace('InspectorMain');
+            } else if (userRole === 'buyer' || userRole === 'seller') {
+                console.log('→ Chuyển đến BuyerMain');
+                navigation.replace('BuyerMain');
+            } else {
+                console.log('→ Fallback to BuyerMain');
+                // Default fallback
+                navigation.replace('BuyerMain');
+            }
         } catch (error) {
             console.error('❌ Lỗi đăng nhập:', error);
             Alert.alert('Lỗi Đăng nhập', error.message || 'Đăng nhập thất bại. Vui lòng kiểm tra thông tin và thử lại.');
