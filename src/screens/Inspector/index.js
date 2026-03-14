@@ -5,4 +5,5 @@ export { default as InspectionDetailScreen } from './InspectionDetailScreen';
 export { default as PerformInspectionScreen } from './PerformInspectionScreen';
 export { default as InspectionHistoryScreen } from './InspectionHistoryScreen';
 export { default as DisputeResolutionScreen } from './DisputeResolutionScreen';
+export { default as DisputeDetailScreen } from './DisputeDetailScreen';
 export { default as EarningsScreen } from './EarningsScreen';
