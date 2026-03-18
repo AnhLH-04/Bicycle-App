@@ -67,7 +67,7 @@ const PerformInspectionScreen = ({ navigation, route }) => {
     
     // Inspector Notes
     inspectorNotes: '',
-    inspectionPhotos: [],
+    inspectionImages: [],
   });
 
   const [currentSection, setCurrentSection] = useState('frame');
@@ -274,6 +274,9 @@ const PerformInspectionScreen = ({ navigation, route }) => {
               if (inspectionData.wheelsImages.length > 0) {
                 uploadPromises.push(InspectorAPI.uploadMultipleMedia(inspectionData.wheelsImages));
               }
+              if (inspectionData.inspectionImages.length > 0) {
+                uploadPromises.push(InspectorAPI.uploadMultipleMedia(inspectionData.inspectionImages));
+              }
               
               const uploadedUrls = await Promise.all(uploadPromises);
               const allPhotos = uploadedUrls.flat();
@@ -342,7 +345,7 @@ const PerformInspectionScreen = ({ navigation, route }) => {
               Alert.alert(
                 'Thành công', 
                 'Báo cáo kiểm định đã được gửi thành công!', 
-                [{ text: 'OK', onPress: () => navigation.navigate('InspectorDashboard') }]
+                [{ text: 'OK', onPress: () => navigation.navigate('InspectorMain', { screen: 'Dashboard' }) }]
               );
             } catch (error) {
               console.error('❌ Submit inspection error:', error);
