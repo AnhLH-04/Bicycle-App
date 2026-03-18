@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,72 +6,95 @@ import {
   FlatList,
   TouchableOpacity,
   TextInput,
-  Image,
-  Alert,
-  Modal,
   ActivityIndicator,
   RefreshControl,
   SafeAreaView,
   StatusBar,
   Platform,
+  ScrollView,
 } from 'react-native';
 import { COLORS } from '../../constants/colors';
 import { MaterialCommunityIcons as Icon } from '@expo/vector-icons';
 import InspectorAPI from '../../services/inspector.api';
 
+// ===================== CONSTANTS =====================
+
+const DISPUTE_REASON_LABELS = {
+  item_not_received: 'Không nhận được hàng',
+  item_not_as_described: 'Hàng không đúng mô tả',
+  damaged_item: 'Hàng bị hư hỏng',
+  counterfeit_parts: 'Linh kiện giả',
+  seller_unresponsive: 'Người bán không phản hồi',
+  buyer_refusing_delivery: 'Người mua từ chối nhận hàng',
+  other: 'Lý do khác',
+};
+
+const DISPUTE_STATUS_CONFIG = {
+  open: { label: 'Mới mở', color: COLORS.warning, icon: 'alert-circle-outline' },
+  under_review: { label: 'Đang xem xét', color: '#8B5CF6', icon: 'eye-outline' },
+  awaiting_evidence: { label: 'Chờ bằng chứng', color: '#F97316', icon: 'clock-outline' },
+  resolved_buyer_favor: { label: 'Có lợi người mua', color: COLORS.success, icon: 'check-circle-outline' },
+  resolved_seller_favor: { label: 'Có lợi người bán', color: COLORS.success, icon: 'check-circle-outline' },
+  resolved_partial_refund: { label: 'Hoàn tiền một phần', color: '#06B6D4', icon: 'check-circle-outline' },
+  closed: { label: 'Đã đóng', color: COLORS.gray, icon: 'close-circle-outline' },
+};
+
+// Map tab keys to backend status values
+const TAB_STATUS_MAP = {
+  all: null,
+  under_review: 'under_review',
+  open: 'open',
+  resolved: null, // will filter locally for resolved_*
+};
+
+const TABS = [
+  { key: 'all', label: 'Tất cả' },
+  { key: 'under_review', label: 'Cần xem xét' },
+  { key: 'open', label: 'Mới mở' },
+  { key: 'resolved', label: 'Đã giải quyết' },
+];
+
+// ===================== COMPONENT =====================
+
 const DisputeResolutionScreen = ({ navigation }) => {
-  const [activeTab, setActiveTab] = useState('pending');
+  const [activeTab, setActiveTab] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedDispute, setSelectedDispute] = useState(null);
-  const [evidenceModalVisible, setEvidenceModalVisible] = useState(false);
-  const [resolutionNotes, setResolutionNotes] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [disputes, setDisputes] = useState([]);
-  const [submitting, setSubmitting] = useState(false);
+  const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, pages: 0 });
 
   useEffect(() => {
     fetchDisputes();
   }, [activeTab]);
 
-  const fetchDisputes = async () => {
+  const fetchDisputes = async (page = 1) => {
     try {
       setLoading(true);
-      const statusMap = {
-        'pending': 'pending',
-        'investigating': 'under_review',
-        'resolved': 'resolved',
-      };
-      const status = statusMap[activeTab] || 'pending';
-      
-      try {
-        const response = await InspectorAPI.getDisputes(status);
-        
-        if (response?.data) {
-          const transformed = response.data.map(item => ({
-            id: item._id,
-            inspectionId: item.transactionId || 'N/A',
-            bikeModel: item.bicycle?.model || 'N/A',
-            bikeImage: item.bicycle?.media?.photos?.[0] || 'https://via.placeholder.com/100',
-            disputeType: item.reason || 'other',
-            reportedBy: item.reporterId ? 'buyer' : 'seller',
-            buyerName: item.reporter?.name || 'N/A',
-            sellerName: item.reportedUser?.name || 'N/A',
-            reportDate: item.createdAt,
-            description: item.description || '',
-            status: item.status === 'under_review' ? 'investigating' : item.status,
-            priority: 'medium',
-            evidence: {
-              buyerPhotos: item.evidence?.photos || [],
-              inspectionReport: item.inspectorReport || {},
-            },
-            resolution: item.resolution?.notes,
-            resolvedDate: item.resolvedAt,
-          }));
-          setDisputes(transformed);
+
+      const params = { page, limit: 20 };
+      const backendStatus = TAB_STATUS_MAP[activeTab];
+      if (backendStatus) {
+        params.status = backendStatus;
+      }
+
+      const response = await InspectorAPI.getDisputes(params);
+
+      if (response?.data) {
+        let disputeList = Array.isArray(response.data) ? response.data : [];
+
+        // For "resolved" tab, filter locally for all resolved statuses
+        if (activeTab === 'resolved') {
+          disputeList = disputeList.filter(d =>
+            d.status?.startsWith('resolved_') || d.status === 'closed'
+          );
         }
-      } catch (apiError) {
-        console.warn('⚠️ Disputes API not available, using empty list');
+
+        setDisputes(disputeList);
+        if (response.pagination) {
+          setPagination(response.pagination);
+        }
+      } else {
         setDisputes([]);
       }
     } catch (error) {
@@ -82,365 +105,215 @@ const DisputeResolutionScreen = ({ navigation }) => {
     }
   };
 
-  const onRefresh = async () => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await fetchDisputes();
     setRefreshing(false);
+  }, [activeTab]);
+
+  // ===================== HELPERS =====================
+
+  const getStatusConfig = (status) => {
+    return DISPUTE_STATUS_CONFIG[status] || { label: status, color: COLORS.gray, icon: 'help-circle-outline' };
   };
 
-  // Mock data for fallback
-  const mockDisputes = [
-    {
-      id: 'DSP-2024-001',
-      inspectionId: 'INS-2024-015',
-      bikeModel: 'Giant TCR Advanced Pro',
-      bikeImage: 'https://via.placeholder.com/100',
-      disputeType: 'condition-mismatch', // 'condition-mismatch', 'missing-parts', 'fake-listing', 'other'
-      reportedBy: 'buyer',
-      buyerName: 'Nguyễn Văn C',
-      sellerName: 'Nguyễn Văn B',
-      reportDate: '2024-02-02T15:30:00',
-      description: 'Xe nhận được không đúng với báo cáo kiểm định. Phanh không hoạt động tốt như mô tả.',
-      status: 'pending', // 'pending', 'investigating', 'resolved', 'rejected'
-      priority: 'high',
-      evidence: {
-        buyerPhotos: ['https://via.placeholder.com/200', 'https://via.placeholder.com/200'],
-        inspectionReport: {
-          frameCondition: 'good',
-          brakeCondition: 'good',
-          drivetrainCondition: 'excellent',
-        },
-      },
-    },
-    {
-      id: 'DSP-2024-002',
-      inspectionId: 'INS-2024-013',
-      bikeModel: 'Specialized S-Works Tarmac',
-      bikeImage: 'https://via.placeholder.com/100',
-      disputeType: 'missing-parts',
-      reportedBy: 'buyer',
-      buyerName: 'Trần Thị D',
-      sellerName: 'Lê Văn E',
-      reportDate: '2024-02-01T10:20:00',
-      description: 'Thiếu bộ phụ kiện như đã mô tả trong báo cáo. Không có đèn và chuông xe.',
-      status: 'investigating',
-      priority: 'medium',
-      evidence: {
-        buyerPhotos: ['https://via.placeholder.com/200'],
-        inspectionReport: {
-          frameCondition: 'fair',
-          brakeCondition: 'fair',
-          drivetrainCondition: 'good',
-        },
-      },
-    },
-    {
-      id: 'DSP-2024-003',
-      inspectionId: 'INS-2024-012',
-      bikeModel: 'Trek Domane SL 7',
-      bikeImage: 'https://via.placeholder.com/100',
-      disputeType: 'condition-mismatch',
-      reportedBy: 'buyer',
-      buyerName: 'Phạm Văn F',
-      sellerName: 'Hoàng Thị G',
-      reportDate: '2024-01-30T14:45:00',
-      description: 'Khung xe có vết nứt không được ghi nhận trong báo cáo kiểm định.',
-      status: 'resolved',
-      priority: 'high',
-      resolution: 'Đã xác nhận có vết nứt. Người mua được hoàn tiền đầy đủ.',
-      resolvedDate: '2024-01-31T16:00:00',
-      evidence: {
-        buyerPhotos: ['https://via.placeholder.com/200', 'https://via.placeholder.com/200'],
-        inspectionReport: {
-          frameCondition: 'good',
-          brakeCondition: 'excellent',
-          drivetrainCondition: 'good',
-        },
-      },
-    },
-  ];
+  const getReasonLabel = (reason) => {
+    return DISPUTE_REASON_LABELS[reason] || reason || 'Không xác định';
+  };
 
-  const filterDisputes = () => {
-    let filtered = disputes;
-
-    if (activeTab !== 'all') {
-      filtered = filtered.filter((dispute) => dispute.status === activeTab);
+  const formatDate = (dateStr) => {
+    if (!dateStr) return 'N/A';
+    try {
+      return new Date(dateStr).toLocaleDateString('vi-VN', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return dateStr;
     }
+  };
 
-    if (searchQuery) {
-      filtered = filtered.filter(
-        (dispute) =>
-          dispute.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          dispute.bikeModel.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          dispute.buyerName.toLowerCase().includes(searchQuery.toLowerCase())
+  const hasInspectorEvidence = (dispute) => {
+    return dispute.inspectorReport && dispute.inspectorReport.comparisonNotes;
+  };
+
+  // ===================== FILTER =====================
+
+  const filteredDisputes = () => {
+    let list = disputes;
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(d =>
+        d._id?.toLowerCase().includes(q) ||
+        d.reason?.toLowerCase().includes(q) ||
+        d.description?.toLowerCase().includes(q) ||
+        getReasonLabel(d.reason).toLowerCase().includes(q)
       );
     }
 
-    return filtered;
+    return list;
   };
 
-  const getStatusColor = (status) => {
-    const colors = {
-      pending: COLORS.warning,
-      investigating: COLORS.info,
-      resolved: COLORS.success,
-      rejected: COLORS.error,
-    };
-    return colors[status] || COLORS.gray;
-  };
+  // ===================== RENDER =====================
 
-  const getStatusText = (status) => {
-    const texts = {
-      pending: 'Chờ xử lý',
-      investigating: 'Đang điều tra',
-      resolved: 'Đã giải quyết',
-      rejected: 'Đã từ chối',
-    };
-    return texts[status] || status;
-  };
-
-  const getDisputeTypeText = (type) => {
-    const texts = {
-      'condition-mismatch': 'Sai tình trạng',
-      'missing-parts': 'Thiếu phụ kiện',
-      'fake-listing': 'Tin giả mạo',
-      other: 'Khác',
-    };
-    return texts[type] || type;
-  };
-
-  const getPriorityColor = (priority) => {
-    const colors = {
-      high: COLORS.error,
-      medium: COLORS.warning,
-      low: COLORS.success,
-    };
-    return colors[priority] || COLORS.gray;
-  };
-
-  const handleViewEvidence = (dispute) => {
-    setSelectedDispute(dispute);
-    setEvidenceModalVisible(true);
-  };
-
-  const handleProvideEvidence = (disputeId) => {
-    Alert.alert(
-      'Cung cấp bằng chứng',
-      'Vui lòng chuẩn bị báo cáo kiểm định gốc và hình ảnh liên quan.',
-      [
-        { text: 'Hủy', style: 'cancel' },
-        {
-          text: 'Tiếp tục',
-          onPress: () => {
-            // TODO: Navigate to evidence submission screen
-            console.log('Provide evidence for:', disputeId);
-          },
-        },
-      ]
-    );
-  };
-
-  const handleResolveDispute = (disputeId, resolution) => {
-    Alert.alert(
-      'Xác nhận giải quyết',
-      `Bạn có chắc chắn muốn đánh dấu tranh chấp này là "${resolution}"?`,
-      [
-        { text: 'Hủy', style: 'cancel' },
-        {
-          text: 'Xác nhận',
-          onPress: () => {
-            // TODO: API call to resolve dispute
-            console.log('Resolve dispute:', disputeId, resolution);
-            Alert.alert('Thành công', 'Tranh chấp đã được giải quyết.');
-          },
-        },
-      ]
-    );
-  };
-
-  const renderDisputeCard = ({ item }) => (
-    <TouchableOpacity
-      style={styles.disputeCard}
-      onPress={() => navigation.navigate('DisputeDetail', { disputeId: item.id })}
-    >
-      {/* Priority Badge */}
-      {item.priority === 'high' && (
-        <View style={[styles.priorityBadge, { backgroundColor: getPriorityColor(item.priority) }]}>
-          <Icon name="alert" size={12} color={COLORS.white} />
-          <Text style={styles.priorityText}>Khẩn cấp</Text>
-        </View>
-      )}
-
-      <View style={styles.cardContent}>
-        <Image source={{ uri: item.bikeImage }} style={styles.bikeImage} />
-        <View style={styles.cardInfo}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.bikeModel}>{item.bikeModel}</Text>
-            <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
-              <Text style={styles.statusText}>{getStatusText(item.status)}</Text>
-            </View>
-          </View>
-
-          <View style={styles.infoRow}>
-            <Icon name="identifier" size={14} color={COLORS.gray} />
-            <Text style={styles.infoText}>{item.id}</Text>
-          </View>
-
-          <View style={styles.infoRow}>
-            <Icon name="alert-circle" size={14} color={COLORS.error} />
-            <Text style={styles.infoText}>{getDisputeTypeText(item.disputeType)}</Text>
-          </View>
-
-          <View style={styles.infoRow}>
-            <Icon name="account" size={14} color={COLORS.gray} />
-            <Text style={styles.infoText}>
-              Người mua: {item.buyerName} vs Người bán: {item.sellerName}
-            </Text>
-          </View>
-
-          <View style={styles.infoRow}>
-            <Icon name="calendar" size={14} color={COLORS.gray} />
-            <Text style={styles.infoText}>
-              {new Date(item.reportDate).toLocaleDateString('vi-VN')}
-            </Text>
-          </View>
-
-          <Text style={styles.description} numberOfLines={2}>
-            {item.description}
-          </Text>
-
-          {/* Action Buttons */}
-          {item.status === 'pending' && (
-            <View style={styles.actionButtons}>
-              <TouchableOpacity
-                style={[styles.actionBtn, styles.evidenceBtn]}
-                onPress={() => handleViewEvidence(item)}
-              >
-                <Icon name="file-document" size={16} color={COLORS.primary} />
-                <Text style={[styles.actionBtnText, { color: COLORS.primary }]}>Xem bằng chứng</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.actionBtn, styles.provideBtn]}
-                onPress={() => handleProvideEvidence(item.id)}
-              >
-                <Icon name="plus" size={16} color={COLORS.success} />
-                <Text style={[styles.actionBtnText, { color: COLORS.success }]}>Cung cấp BC</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {item.status === 'investigating' && (
-            <View style={styles.actionButtons}>
-              <TouchableOpacity
-                style={[styles.actionBtn, styles.resolveBtn]}
-                onPress={() => handleResolveDispute(item.id, 'buyer-favor')}
-              >
-                <Icon name="check" size={16} color={COLORS.white} />
-                <Text style={styles.actionBtnText}>Ủng hộ người mua</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.actionBtn, styles.rejectBtn]}
-                onPress={() => handleResolveDispute(item.id, 'seller-favor')}
-              >
-                <Icon name="close" size={16} color={COLORS.white} />
-                <Text style={styles.actionBtnText}>Ủng hộ người bán</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {item.status === 'resolved' && item.resolution && (
-            <View style={styles.resolutionContainer}>
-              <Icon name="check-circle" size={16} color={COLORS.success} />
-              <Text style={styles.resolutionText}>{item.resolution}</Text>
-            </View>
-          )}
-        </View>
+  const renderStatusBadge = (status) => {
+    const config = getStatusConfig(status);
+    return (
+      <View style={[styles.statusBadge, { backgroundColor: config.color + '20' }]}>
+        <Icon name={config.icon} size={12} color={config.color} />
+        <Text style={[styles.statusText, { color: config.color }]}>{config.label}</Text>
       </View>
-    </TouchableOpacity>
+    );
+  };
+
+  const renderDisputeCard = ({ item }) => {
+    const statusConfig = getStatusConfig(item.status);
+    const needsEvidence = item.status === 'under_review' && !hasInspectorEvidence(item);
+
+    return (
+      <TouchableOpacity
+        style={styles.disputeCard}
+        onPress={() => navigation.navigate('DisputeDetail', { disputeId: item._id })}
+        activeOpacity={0.7}
+      >
+        {/* Top accent bar */}
+        <View style={[styles.cardAccent, { backgroundColor: statusConfig.color }]} />
+
+        <View style={styles.cardBody}>
+          {/* Header row */}
+          <View style={styles.cardHeader}>
+            <View style={styles.cardHeaderLeft}>
+              <View style={styles.idContainer}>
+                <Icon name="pound" size={14} color={COLORS.primary} />
+                <Text style={styles.disputeId} numberOfLines={1}>
+                  {item._id?.slice(-8)?.toUpperCase()}
+                </Text>
+              </View>
+              <Text style={styles.dateText}>{formatDate(item.createdAt)}</Text>
+            </View>
+            {renderStatusBadge(item.status)}
+          </View>
+
+          {/* Reason */}
+          <View style={styles.reasonRow}>
+            <Icon name="alert-decagram" size={16} color={COLORS.error} />
+            <Text style={styles.reasonText}>{getReasonLabel(item.reason)}</Text>
+          </View>
+
+          {/* Description */}
+          {item.description ? (
+            <Text style={styles.descriptionText} numberOfLines={2}>
+              {item.description}
+            </Text>
+          ) : null}
+
+          {/* Evidence photos count */}
+          {item.evidence?.photos?.length > 0 && (
+            <View style={styles.evidenceRow}>
+              <Icon name="image-multiple" size={14} color={COLORS.gray} />
+              <Text style={styles.evidenceCountText}>
+                {item.evidence.photos.length} ảnh bằng chứng
+              </Text>
+            </View>
+          )}
+
+          {/* Inspector evidence indicator */}
+          <View style={styles.cardFooter}>
+            {hasInspectorEvidence(item) ? (
+              <View style={styles.evidenceBadge}>
+                <Icon name="check-circle" size={14} color={COLORS.success} />
+                <Text style={[styles.evidenceBadgeText, { color: COLORS.success }]}>
+                  Đã có ý kiến kiểm định
+                </Text>
+              </View>
+            ) : needsEvidence ? (
+              <View style={[styles.evidenceBadge, styles.evidenceBadgeWarning]}>
+                <Icon name="pencil-plus" size={14} color="#F97316" />
+                <Text style={[styles.evidenceBadgeText, { color: '#F97316' }]}>
+                  Cần cung cấp ý kiến
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.evidenceBadge}>
+                <Icon name="information-outline" size={14} color={COLORS.gray} />
+                <Text style={[styles.evidenceBadgeText, { color: COLORS.gray }]}>
+                  Xem chi tiết
+                </Text>
+              </View>
+            )}
+
+            <Icon name="chevron-right" size={20} color={COLORS.gray} />
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderEmptyState = () => (
+    <View style={styles.emptyContainer}>
+      <View style={styles.emptyIconWrapper}>
+        <Icon name="scale-balance" size={48} color={COLORS.primary} />
+      </View>
+      <Text style={styles.emptyTitle}>Không có tranh chấp nào</Text>
+      <Text style={styles.emptySubtitle}>
+        Hiện chưa có tranh chấp nào trong danh mục này
+      </Text>
+    </View>
   );
 
-  const EvidenceModal = () => (
-    <Modal
-      visible={evidenceModalVisible}
-      animationType="slide"
-      transparent={true}
-      onRequestClose={() => setEvidenceModalVisible(false)}
-    >
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Bằng chứng tranh chấp</Text>
-            <TouchableOpacity onPress={() => setEvidenceModalVisible(false)}>
-              <Icon name="close" size={24} color={COLORS.dark} />
-            </TouchableOpacity>
-          </View>
-
-          {selectedDispute && (
-            <View style={styles.evidenceContent}>
-              <Text style={styles.evidenceSection}>Ảnh từ người mua:</Text>
-              <View style={styles.photosGrid}>
-                {(selectedDispute.evidence?.buyerPhotos || []).map((photo, index) => (
-                  <Image key={index} source={{ uri: photo }} style={styles.evidencePhoto} />
-                ))}
-              </View>
-
-              <Text style={styles.evidenceSection}>Báo cáo kiểm định gốc:</Text>
-              <View style={styles.reportCard}>
-                <View style={styles.reportRow}>
-                  <Text style={styles.reportLabel}>Khung xe:</Text>
-                  <Text style={styles.reportValue}>
-                    {selectedDispute.evidence.inspectionReport.frameCondition}
-                  </Text>
-                </View>
-                <View style={styles.reportRow}>
-                  <Text style={styles.reportLabel}>Phanh:</Text>
-                  <Text style={styles.reportValue}>
-                    {selectedDispute.evidence.inspectionReport.brakeCondition}
-                  </Text>
-                </View>
-                <View style={styles.reportRow}>
-                  <Text style={styles.reportLabel}>Bộ truyền động:</Text>
-                  <Text style={styles.reportValue}>
-                    {selectedDispute.evidence.inspectionReport.drivetrainCondition}
-                  </Text>
-                </View>
-              </View>
-
-              <Text style={styles.evidenceSection}>Ghi chú của bạn:</Text>
-              <TextInput
-                style={styles.notesInput}
-                placeholder="Nhập nhận xét của bạn về tranh chấp này..."
-                multiline
-                numberOfLines={4}
-                value={resolutionNotes}
-                onChangeText={setResolutionNotes}
-              />
-
-              <TouchableOpacity
-                style={styles.submitBtn}
-                onPress={() => {
-                  // TODO: Submit notes
-                  Alert.alert('Thành công', 'Ghi chú đã được gửi.');
-                  setEvidenceModalVisible(false);
-                }}
-              >
-                <Text style={styles.submitBtnText}>Gửi ghi chú</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
+  const renderHeader = () => (
+    <View style={styles.statsContainer}>
+      <View style={styles.statCard}>
+        <Icon name="file-document-outline" size={24} color={COLORS.primary} />
+        <Text style={styles.statNumber}>{pagination.total || disputes.length}</Text>
+        <Text style={styles.statLabel}>Tổng cộng</Text>
       </View>
-    </Modal>
+      <View style={styles.statCard}>
+        <Icon name="eye-check-outline" size={24} color="#8B5CF6" />
+        <Text style={styles.statNumber}>
+          {disputes.filter(d => d.status === 'under_review').length}
+        </Text>
+        <Text style={styles.statLabel}>Đang xem xét</Text>
+      </View>
+      <View style={styles.statCard}>
+        <Icon name="pencil-plus-outline" size={24} color="#F97316" />
+        <Text style={styles.statNumber}>
+          {disputes.filter(d => d.status === 'under_review' && !hasInspectorEvidence(d)).length}
+        </Text>
+        <Text style={styles.statLabel}>Cần ý kiến</Text>
+      </View>
+    </View>
   );
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#F5F7FA', paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0 }}>
+    <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor="#F5F7FA" />
-      <View style={styles.container}>
+
+      {/* Header */}
+      <View style={styles.headerContainer}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Icon name="arrow-left" size={24} color={COLORS.dark} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Tranh chấp</Text>
+        <TouchableOpacity
+          style={styles.refreshButton}
+          onPress={onRefresh}
+        >
+          <Icon name="refresh" size={22} color={COLORS.primary} />
+        </TouchableOpacity>
+      </View>
+
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Đang tải dữ liệu...</Text>
+          <Text style={styles.loadingText}>Đang tải tranh chấp...</Text>
         </View>
       ) : (
         <>
@@ -450,6 +323,7 @@ const DisputeResolutionScreen = ({ navigation }) => {
             <TextInput
               style={styles.searchInput}
               placeholder="Tìm kiếm tranh chấp..."
+              placeholderTextColor={COLORS.textLight}
               value={searchQuery}
               onChangeText={setSearchQuery}
             />
@@ -461,342 +335,83 @@ const DisputeResolutionScreen = ({ navigation }) => {
           </View>
 
           {/* Tabs */}
-          <View style={styles.tabContainer}>
-            <TouchableOpacity
-              style={[styles.tab, activeTab === 'all' && styles.activeTab]}
-              onPress={() => setActiveTab('all')}
-            >
-              <Text style={[styles.tabText, activeTab === 'all' && styles.activeTabText]}>Tất cả</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.tab, activeTab === 'pending' && styles.activeTab]}
-              onPress={() => setActiveTab('pending')}
-            >
-              <Text style={[styles.tabText, activeTab === 'pending' && styles.activeTabText]}>
-                Chờ xử lý
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.tab, activeTab === 'investigating' && styles.activeTab]}
-              onPress={() => setActiveTab('investigating')}
-            >
-              <Text style={[styles.tabText, activeTab === 'investigating' && styles.activeTabText]}>
-                Đang xử lý
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.tab, activeTab === 'resolved' && styles.activeTab]}
-              onPress={() => setActiveTab('resolved')}
-            >
-              <Text style={[styles.tabText, activeTab === 'resolved' && styles.activeTabText]}>
-                Đã giải quyết
-              </Text>
-            </TouchableOpacity>
-          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.tabScrollContainer}
+          >
+            {TABS.map((tab) => (
+              <TouchableOpacity
+                key={tab.key}
+                style={[
+                  styles.tab,
+                  activeTab === tab.key && styles.activeTab,
+                ]}
+                onPress={() => setActiveTab(tab.key)}
+              >
+                <Text
+                  style={[
+                    styles.tabText,
+                    activeTab === tab.key && styles.activeTabText,
+                  ]}
+                >
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
 
           {/* Disputes List */}
           <FlatList
-            data={filterDisputes()}
+            data={filteredDisputes()}
             renderItem={renderDisputeCard}
-            keyExtractor={(item) => item.id}
+            keyExtractor={(item) => item._id}
             contentContainerStyle={styles.listContainer}
+            ListHeaderComponent={renderHeader}
             refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={[COLORS.primary]}
+              />
             }
-            ListEmptyComponent={
-              <View style={styles.emptyContainer}>
-                <Icon name="scale-balance" size={64} color={COLORS.lightGray} />
-                <Text style={styles.emptyText}>Không có tranh chấp nào</Text>
-              </View>
-            }
+            ListEmptyComponent={renderEmptyState}
+            showsVerticalScrollIndicator={false}
           />
-
-          {/* Evidence Modal */}
-          <EvidenceModal />
         </>
       )}
-    </View>
     </SafeAreaView>
   );
 };
 
+// ===================== STYLES =====================
+
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    backgroundColor: COLORS.lightGray,
+    backgroundColor: '#F5F7FA',
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
-  searchContainer: {
+  headerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.white,
-    margin: 16,
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  searchInput: {
-    flex: 1,
     paddingVertical: 12,
-    paddingHorizontal: 8,
-    fontSize: 14,
-  },
-  tabContainer: {
-    flexDirection: 'row',
-    backgroundColor: COLORS.white,
-    paddingHorizontal: 16,
-    paddingTop: 8,
+    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
-  tab: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: 'center',
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
+  backButton: {
+    padding: 4,
   },
-  activeTab: {
-    borderBottomColor: COLORS.primary,
-  },
-  tabText: {
-    fontSize: 13,
-    color: COLORS.gray,
-  },
-  activeTabText: {
-    color: COLORS.primary,
-    fontWeight: 'bold',
-  },
-  listContainer: {
-    padding: 16,
-  },
-  disputeCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
-    marginBottom: 16,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  priorityBadge: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    zIndex: 1,
-  },
-  priorityText: {
-    color: COLORS.white,
-    fontSize: 10,
-    fontWeight: 'bold',
-    marginLeft: 4,
-  },
-  cardContent: {
-    flexDirection: 'row',
-    padding: 16,
-  },
-  bikeImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 8,
-    backgroundColor: COLORS.lightGray,
-  },
-  cardInfo: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 8,
-  },
-  bikeModel: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORS.dark,
-    flex: 1,
-    marginRight: 8,
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  statusText: {
-    color: COLORS.white,
-    fontSize: 11,
-    fontWeight: 'bold',
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  infoText: {
-    fontSize: 12,
-    color: COLORS.gray,
-    marginLeft: 4,
-    flex: 1,
-  },
-  description: {
-    fontSize: 13,
-    color: COLORS.dark,
-    marginTop: 8,
-    lineHeight: 18,
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    marginTop: 12,
-    gap: 8,
-  },
-  actionBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: 8,
-    gap: 4,
-    borderWidth: 1,
-  },
-  evidenceBtn: {
-    borderColor: COLORS.primary,
-    backgroundColor: COLORS.white,
-  },
-  provideBtn: {
-    borderColor: COLORS.success,
-    backgroundColor: COLORS.white,
-  },
-  resolveBtn: {
-    backgroundColor: COLORS.success,
-    borderColor: COLORS.success,
-  },
-  rejectBtn: {
-    backgroundColor: COLORS.error,
-    borderColor: COLORS.error,
-  },
-  actionBtnText: {
-    color: COLORS.white,
-    fontSize: 13,
-    fontWeight: 'bold',
-  },
-  resolutionContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 12,
-    padding: 12,
-    backgroundColor: COLORS.success + '20',
-    borderRadius: 8,
-  },
-  resolutionText: {
-    fontSize: 12,
-    color: COLORS.success,
-    marginLeft: 8,
-    flex: 1,
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
-  },
-  emptyText: {
-    fontSize: 16,
-    color: COLORS.gray,
-    marginTop: 16,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: COLORS.white,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '80%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  modalTitle: {
+  headerTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: COLORS.dark,
   },
-  evidenceContent: {
-    padding: 20,
-  },
-  evidenceSection: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: COLORS.dark,
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  photosGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  evidencePhoto: {
-    width: 100,
-    height: 100,
-    borderRadius: 8,
-    backgroundColor: COLORS.lightGray,
-  },
-  reportCard: {
-    backgroundColor: COLORS.lightGray,
-    borderRadius: 12,
-    padding: 16,
-  },
-  reportRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  reportLabel: {
-    fontSize: 13,
-    color: COLORS.gray,
-  },
-  reportValue: {
-    fontSize: 13,
-    fontWeight: 'bold',
-    color: COLORS.dark,
-  },
-  notesInput: {
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 14,
-    textAlignVertical: 'top',
-    minHeight: 100,
-  },
-  submitBtn: {
-    backgroundColor: COLORS.primary,
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  submitBtnText: {
-    color: COLORS.white,
-    fontSize: 16,
-    fontWeight: 'bold',
+  refreshButton: {
+    padding: 4,
   },
   loadingContainer: {
     flex: 1,
@@ -807,6 +422,210 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 14,
     color: COLORS.gray,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 16,
+    marginTop: 12,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 11,
+    paddingHorizontal: 8,
+    fontSize: 14,
+    color: COLORS.dark,
+  },
+  tabScrollContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  tab: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  activeTab: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  tabText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: COLORS.gray,
+  },
+  activeTabText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 0,
+    paddingBottom: 12,
+    gap: 10,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  statNumber: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: COLORS.dark,
+    marginTop: 6,
+  },
+  statLabel: {
+    fontSize: 11,
+    color: COLORS.gray,
+    marginTop: 2,
+  },
+  listContainer: {
+    padding: 16,
+    paddingTop: 4,
+  },
+  disputeCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    marginBottom: 12,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  cardAccent: {
+    height: 3,
+    width: '100%',
+  },
+  cardBody: {
+    padding: 16,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 10,
+  },
+  cardHeaderLeft: {
+    flex: 1,
+    marginRight: 10,
+  },
+  idContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 2,
+  },
+  disputeId: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.primary,
+    letterSpacing: 0.5,
+  },
+  dateText: {
+    fontSize: 12,
+    color: COLORS.gray,
+    marginTop: 2,
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 16,
+    gap: 4,
+  },
+  statusText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  reasonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
+  reasonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.dark,
+    flex: 1,
+  },
+  descriptionText: {
+    fontSize: 13,
+    color: COLORS.secondary,
+    lineHeight: 18,
+    marginBottom: 8,
+  },
+  evidenceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 8,
+  },
+  evidenceCountText: {
+    fontSize: 12,
+    color: COLORS.gray,
+  },
+  cardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 4,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  evidenceBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  evidenceBadgeWarning: {},
+  evidenceBadgeText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  emptyIconWrapper: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: COLORS.primary + '15',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.dark,
+    marginBottom: 4,
+  },
+  emptySubtitle: {
+    fontSize: 13,
+    color: COLORS.gray,
+    textAlign: 'center',
+    paddingHorizontal: 32,
   },
 });
 

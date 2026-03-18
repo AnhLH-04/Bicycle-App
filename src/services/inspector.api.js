@@ -142,22 +142,25 @@ export const InspectorAPI = {
   },
 
   /**
-   * Get disputes list (for inspector to view)
-   * Note: This endpoint might not exist on backend yet
-   * Returns empty array if endpoint not available
+   * Get all disputes (inspector has access)
+   * GET /api/v1/disputes/admin/all
+   * @param {object} params - Query params: { status, page, limit }
    */
-  getDisputes: async (status = 'under_review') => {
+  getDisputes: async (params = {}) => {
     try {
-      console.log(`📤 Fetching disputes with status: ${status}`);
-      // This endpoint might need to be created on backend
-      // For now using a generic disputes endpoint
-      const data = await authenticatedFetch(`${API_BASE_URL}/disputes?status=${status}`);
+      const queryParams = new URLSearchParams();
+      if (params.status) queryParams.append('status', params.status);
+      if (params.page) queryParams.append('page', params.page);
+      if (params.limit) queryParams.append('limit', params.limit);
+      const queryString = queryParams.toString() ? `?${queryParams.toString()}` : '';
+      
+      console.log(`📤 Fetching disputes with params:`, params);
+      const data = await authenticatedFetch(`${API_BASE_URL}/disputes/admin/all${queryString}`);
       console.log('✅ Disputes fetched:', data);
       return data;
     } catch (error) {
-      console.warn('⚠️ Get disputes error (endpoint not available):', error.message);
-      // Return empty array instead of throwing for graceful handling
-      return { data: [], message: 'Disputes endpoint not available' };
+      console.error('❌ Get disputes error:', error.message);
+      throw error;
     }
   },
 
@@ -205,6 +208,26 @@ export const InspectorAPI = {
   },
 
   /**
+   * Get original inspection report by bicycle ID (for comparison in disputes)
+   * GET /api/v1/inspections/bicycle/:bicycleId
+   * @param {string} bicycleId - The bicycle ID
+   */
+  getInspectionByBicycle: async (bicycleId) => {
+    try {
+      console.log(`📤 Fetching inspection report for bicycle: ${bicycleId}`);
+      const data = await authenticatedFetch(`${API_BASE_URL}/inspections/bicycle/${bicycleId}`);
+      console.log('✅ Inspection report fetched:', data);
+      return data;
+    } catch (error) {
+      console.error('❌ Get inspection by bicycle error:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Upload inspection media (photos/videos)
+   * This is a helper function for uploading images
+   * You'll need to implement the actual upload endpoint
    * Upload inspection media (photos/videos) for inspector
    * POST /api/v1/cloudinary/upload-image/{inspector}
    * @param {string} uri - Local file URI

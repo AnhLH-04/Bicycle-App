@@ -30,6 +30,7 @@ import InspectionDetailScreen from '../screens/Inspector/InspectionDetailScreen'
 import PerformInspectionScreen from '../screens/Inspector/PerformInspectionScreen';
 import InspectionHistoryScreen from '../screens/Inspector/InspectionHistoryScreen';
 import DisputeResolutionScreen from '../screens/Inspector/DisputeResolutionScreen';
+import DisputeDetailScreen from '../screens/Inspector/DisputeDetailScreen';
 import EarningsScreen from '../screens/Inspector/EarningsScreen';
 import InspectorProfileScreen from '../screens/Inspector/InspectorProfileScreen';
 
@@ -148,6 +149,7 @@ function AppNavigatorContent() {
             <Stack.Screen name="InspectionDetail" component={InspectionDetailScreen} />
             <Stack.Screen name="PerformInspection" component={PerformInspectionScreen} />
             <Stack.Screen name="DisputeResolution" component={DisputeResolutionScreen} />
+            <Stack.Screen name="DisputeDetail" component={DisputeDetailScreen} />
             
             {/* Legacy support - redirect to BuyerMain */}
             <Stack.Screen 
