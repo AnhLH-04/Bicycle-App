@@ -29,13 +29,13 @@ const InspectionRequestsScreen = ({ navigation, route }) => {
   useEffect(() => {
     fetchInspections();
     
-    // Auto-refresh every 5 seconds
-    const refreshInterval = setInterval(() => {
-      fetchInspections();
-    }, 5000);
+    // // Auto-refresh every 5 seconds
+    // const refreshInterval = setInterval(() => {
+    //   fetchInspections();
+    // }, 5000);
     
-    // Cleanup interval on unmount
-    return () => clearInterval(refreshInterval);
+    // // Cleanup interval on unmount
+    // return () => clearInterval(refreshInterval);
   }, [activeTab]);
 
   const fetchInspections = async () => {
