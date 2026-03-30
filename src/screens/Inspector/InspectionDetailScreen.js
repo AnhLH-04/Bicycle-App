@@ -38,6 +38,7 @@ const InspectionDetailScreen = ({ navigation, route }) => {
     
     // Seller Info
     seller: {
+      id: 'seller-demo-id',
       name: 'Nguyễn Văn B',
       phone: '0912345678',
       email: 'nguyenvanb@email.com',
@@ -111,7 +112,18 @@ const InspectionDetailScreen = ({ navigation, route }) => {
           console.warn('⚠️ Could not fetch bicycle:', error.message);
         }
       }
-      
+      // Fetch seller info using sellerId
+      const sellerId = bike?.sellerId || data.sellerId || null;
+      let sellerInfo = null;
+      if (sellerId) {
+        try {
+          const sellerResponse = await InspectorAPI.getUserById(sellerId);
+          sellerInfo = sellerResponse?.data || sellerResponse || null;
+        } catch (error) {
+          console.warn('⚠️ Could not fetch seller:', error.message);
+        }
+      }
+
       // Transform my-inspections data to UI format
       setInspection({
         id: data._id || data.id,
@@ -124,11 +136,12 @@ const InspectionDetailScreen = ({ navigation, route }) => {
         bikeImages: bike?.media?.images || bike?.media?.photos || data.media?.photos || [],
         description: bike?.description || '',
         seller: {
-          name: bike?.seller?.name || 'N/A',
-          phone: bike?.seller?.phone || 'N/A',
-          email: bike?.seller?.email || 'N/A',
-          rating: bike?.seller?.reputation?.rating || 0,
-          totalSales: bike?.seller?.reputation?.totalSales || 0,
+          id: sellerId,
+          name: sellerInfo ? `${sellerInfo.firstName || ''} ${sellerInfo.lastName || ''}`.trim() || 'N/A' : 'N/A',
+          phone: sellerInfo?.phone || 'N/A',
+          email: sellerInfo?.email || 'N/A',
+          rating: sellerInfo?.reputation?.rating || 0,
+          totalSales: sellerInfo?.reputation?.totalSales || 0,
         },
         requestType: data.inspectionType || 'onsite',
         address: bike?.location ? 
@@ -150,7 +163,7 @@ const InspectionDetailScreen = ({ navigation, route }) => {
         verdict: data.verdict || 'pending',
         validUntil: data.validUntil || null,
       });
-      console.log('✅ Transformed inspection data:', inspection);
+      // console.log('✅ Transformed inspection data:', inspection);
     } catch (error) {
       console.error('❌ Error transforming inspection data:', error);
     } finally {
@@ -179,6 +192,18 @@ const InspectionDetailScreen = ({ navigation, route }) => {
           }
         }
         
+        // Fetch seller info using sellerId
+        const sellerId = bike?.sellerId || data.sellerId || null;
+        let sellerInfo = null;
+        if (sellerId) {
+          try {
+            const sellerResponse = await InspectorAPI.getUserById(sellerId);
+            sellerInfo = sellerResponse?.data || sellerResponse || null;
+          } catch (error) {
+            console.warn('⚠️ Could not fetch seller:', error.message);
+          }
+        }
+
         // Transform API data to match UI
         setInspection({
           id: data._id,
@@ -192,11 +217,12 @@ const InspectionDetailScreen = ({ navigation, route }) => {
           bikeImages: bike?.media?.images || bike?.media?.photos || ['https://bizweb.dktcdn.net/100/412/747/products/xe-dap-dua-magicbros-s600-5.jpg?v=1731484215820'],
           description: bike?.description || '',
           seller: {
-            name: bike?.seller?.name || 'N/A',
-            phone: bike?.seller?.phone || 'N/A',
-            email: bike?.seller?.email || 'N/A',
-            rating: bike?.seller?.reputation?.rating || 0,
-            totalSales: bike?.seller?.reputation?.totalSales || 0,
+            id: sellerId,
+            name: sellerInfo?.name || sellerInfo?.fullName || sellerInfo?.username || 'N/A',
+            phone: sellerInfo?.phone || sellerInfo?.phoneNumber || 'N/A',
+            email: sellerInfo?.email || 'N/A',
+            rating: sellerInfo?.reputation?.rating || 0,
+            totalSales: sellerInfo?.reputation?.totalSales || 0,
           },
           requestType: data.inspectionType || 'onsite',
           address: bike?.location ? 
@@ -219,7 +245,6 @@ const InspectionDetailScreen = ({ navigation, route }) => {
           validUntil: data.validUntil || null,
         });
       }
-      console.log('✅ Final inspection data:', inspection);
     } catch (error) {
       console.error('❌ Error fetching inspection detail:', error);
       Alert.alert('Lỗi', 'Không thể tải chi tiết kiểm định. Vui lòng thử lại.');
@@ -233,8 +258,10 @@ const InspectionDetailScreen = ({ navigation, route }) => {
   };
 
   const handleMessage = () => {
-    // TODO: Navigate to chat screen
-    navigation.navigate('ChatDetail', { userId: inspection.seller.id });
+    navigation.navigate('ChatDetail', {
+      user: inspection?.seller?.name || 'Người bán',
+      recipientId: inspection?.seller?.id,
+    });
   };
 
   const handleNavigate = () => {
@@ -384,6 +411,10 @@ const InspectionDetailScreen = ({ navigation, route }) => {
               </View>
               <View style={styles.sellerInfo}>
                 <Text style={styles.sellerName}>{inspection.seller.name}</Text>
+                <View style={styles.sellerPhoneRow}>
+                  <Icon name="phone" size={13} color={COLORS.gray} />
+                  <Text style={styles.sellerPhone}>{inspection.seller.phone}</Text>
+                </View>
                 <View style={styles.ratingContainer}>
                   <Icon name="star" size={14} color={COLORS.warning} />
                   <Text style={styles.rating}>{inspection.seller.rating}</Text>
@@ -880,6 +911,18 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: 'bold',
     color: COLORS.dark,
+  },
+  sellerPhoneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 3,
+    marginBottom: 2,
+  },
+  sellerPhone: {
+    fontSize: 13,
+    color: COLORS.gray,
+    fontWeight: '500',
   },
   ratingContainer: {
     flexDirection: 'row',

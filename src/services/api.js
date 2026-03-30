@@ -256,7 +256,7 @@ export const BicycleAPI = {
                 throw new Error(data.message || 'Failed to get bicycle');
             }
 
-            console.log('✅ Bicycle fetched:', data);
+            // console.log('✅ Bicycle fetched:', data);
             return data;
         } catch (error) {
             console.error('❌ Get bicycle error:', error);

@@ -143,7 +143,19 @@ export default function ProductDetailScreen() {
                         </View>
                         <TouchableOpacity
                             style={styles.chatButton}
-                            onPress={() => navigation.navigate('ChatDetail', { user: product.seller || 'Seller' })}
+                            onPress={() =>
+                                navigation.navigate('ChatDetail', {
+                                    user:
+                                        product?.seller?.name ||
+                                        product?.sellerName ||
+                                        (typeof product?.seller === 'string' ? product.seller : 'Người bán'),
+                                    recipientId:
+                                        product?.seller?._id ||
+                                        product?.seller?.id ||
+                                        product?.sellerId ||
+                                        null,
+                                })
+                            }
                         >
                             <Ionicons name="chatbubble-ellipses-outline" size={20} color={COLORS.primary} />
                         </TouchableOpacity>

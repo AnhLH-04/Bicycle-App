@@ -350,6 +350,23 @@ export const InspectorAPI = {
   },
 
   /**
+   * Get transaction by ID (to extract bicycleId for inspection lookup)
+   * GET /api/v1/transactions/:id
+   * @param {string} transactionId - The transaction ID
+   */
+  getTransactionById: async (transactionId) => {
+    try {
+      console.log(`📤 Fetching transaction by ID: ${transactionId}`);
+      const data = await authenticatedFetch(`${API_BASE_URL}/transactions/${transactionId}`);
+      console.log('✅ Transaction fetched:', data);
+      return data;
+    } catch (error) {
+      console.error('❌ Get transaction by ID error:', error);
+      throw error;
+    }
+  },
+
+  /**
    * Get all bicycles to match with inspection bicycleId
    * POST /api/v1/bicycles/get-all-bicycles
    */
@@ -372,18 +389,18 @@ export const InspectorAPI = {
 
   /**
    * Get user details by ID (to fetch seller information)
-   * GET /api/v1/users/:id
+   * POST /api/v1/users/:id
    * @param {string} userId - The user ID
    */
   getUserById: async (userId) => {
     try {
       console.log(`📤 Fetching user details for ID: ${userId}`);
-      const data = await authenticatedFetch(`${API_BASE_URL}/users/${userId}`);
+      const data = await authenticatedFetch(`${API_BASE_URL}/users/${userId}`, { method: 'POST' });
       console.log('✅ User details fetched:', data);
       return data;
     } catch (error) {
       console.error('❌ Get user by ID error:', error);
-      return null; // Return null instead of throwing to handle gracefully
+      return null;
     }
   },
 };

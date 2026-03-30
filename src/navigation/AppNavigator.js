@@ -31,7 +31,7 @@ import PerformInspectionScreen from '../screens/Inspector/PerformInspectionScree
 import InspectionHistoryScreen from '../screens/Inspector/InspectionHistoryScreen';
 import DisputeResolutionScreen from '../screens/Inspector/DisputeResolutionScreen';
 import DisputeDetailScreen from '../screens/Inspector/DisputeDetailScreen';
-import EarningsScreen from '../screens/Inspector/EarningsScreen';
+// import EarningsScreen from '../screens/Inspector/EarningsScreen';
 import InspectorProfileScreen from '../screens/Inspector/InspectorProfileScreen';
 
 const Stack = createNativeStackNavigator();
@@ -84,8 +84,10 @@ function InspectorTabNavigator() {
                         iconName = focused ? 'list' : 'list-outline';
                     } else if (route.name === 'History') {
                         iconName = focused ? 'time' : 'time-outline';
-                    } else if (route.name === 'Earnings') {
-                        iconName = focused ? 'wallet' : 'wallet-outline';
+                    // } else if (route.name === 'Earnings') {
+                        // iconName = focused ? 'wallet' : 'wallet-outline';
+                    } else if (route.name === 'Messages') {
+                        iconName = focused ? 'chatbubble-ellipses' : 'chatbubble-ellipses-outline';
                     } else if (route.name === 'InspectorProfile') {
                         iconName = focused ? 'person' : 'person-outline';
                     }
@@ -112,10 +114,15 @@ function InspectorTabNavigator() {
                 component={InspectionHistoryScreen}
                 options={{ tabBarLabel: 'Lịch sử' }}
             />
-            <Tab.Screen 
+            {/* <Tab.Screen 
                 name="Earnings" 
                 component={EarningsScreen}
                 options={{ tabBarLabel: 'Thu nhập' }}
+            /> */}
+            <Tab.Screen
+                name="Messages"
+                component={ChatListScreen}
+                options={{ tabBarLabel: 'Tin nhắn' }}
             />
             <Tab.Screen 
                 name="InspectorProfile" 
