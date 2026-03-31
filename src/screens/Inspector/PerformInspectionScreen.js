@@ -697,6 +697,8 @@ const styles = StyleSheet.create({
   tabsContainer: {
     backgroundColor: COLORS.white,
     marginTop: 8,
+    flexGrow: 0,
+    flexShrink: 0,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
@@ -707,7 +709,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 14,
     gap: 4,
   },
   activeTab: {

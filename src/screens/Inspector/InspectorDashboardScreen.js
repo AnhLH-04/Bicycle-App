@@ -152,20 +152,20 @@ const InspectorDashboardScreen = ({ navigation }) => {
             color={COLORS.warning}
             onPress={() => navigation.navigate('Requests', { filter: 'pending' })}
           />
-          <StatCard
+          {/* <StatCard
             icon="check-circle-outline"
             label="Hoàn thành hôm nay"
             value={stats.completedToday}
             color={COLORS.success}
             onPress={() => navigation.navigate('History', { filter: 'today' })}
           />
-          <StatCard
+          {/* <StatCard
             icon="cash"
             label="Thu nhập"
             value={`${(stats.totalEarnings / 1000).toFixed(0)}K`}
             color={COLORS.primary}
             onPress={() => navigation.navigate('Earnings')}
-          />
+          /> */}
           <StatCard
             icon="alert-circle-outline"
             label="Tranh chấp"

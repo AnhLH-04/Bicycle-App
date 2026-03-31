@@ -107,13 +107,17 @@ const DisputeDetailScreen = ({ route, navigation }) => {
         }
       }
 
-      // Strategy 2: Backend does NOT populate transactionId in getDisputeById,
-      // so transactionId is just a raw ObjectId string. We cannot get bicycleId directly.
-      // However, if the dispute has transactionId as a string, we can't use it to
-      // fetch bicycle info without a separate transaction API.
-      // For now, this path is not available — the inspector report will be auto-linked
-      // when they submit evidence via PATCH /inspector-evidence.
-      console.log('ℹ️ No linked inspection report yet. Inspector can still submit evidence.');
+      // Strategy 2: Use bicycleId from transactionDetails
+      const bicycleId = disputeData.transactionDetails?.bicycleId;
+      if (bicycleId) {
+        const res = await InspectorAPI.getInspectionByBicycleId(bicycleId);
+        if (res?.data) {
+          setInspectionReport(res.data);
+          return;
+        }
+      }
+
+      console.log('ℹ️ No inspection report found for this bicycle.');
     } catch (error) {
       console.warn('⚠️ Could not fetch original inspection report:', error.message);
     } finally {

@@ -1,38 +1,232 @@
-import React from 'react';
-import { View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity, Image } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+    View,
+    Text,
+    StyleSheet,
+    SafeAreaView,
+    FlatList,
+    TouchableOpacity,
+    Image,
+    ActivityIndicator,
+    RefreshControl,
+} from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { COLORS } from '../../constants/colors';
+import MessageAPI from '../../services/message.api';
+import SocketService from '../../services/socket.service';
+import { useAuth } from '../../context/AuthContext';
 
-const MOCK_CHATS = [
-    { id: '1', user: 'Nguyễn Văn B', lastMessage: 'Xe này còn không bạn?', time: '10:30', avatar: 'https://via.placeholder.com/50' },
-    { id: '2', user: 'Shop Xe Đạp X', lastMessage: 'Giá đó đã bao gồm phí ship chưa?', time: 'Hôm qua', avatar: 'https://via.placeholder.com/50' },
-];
+const getId = (value) => String(value?._id || value?.id || value || '');
+
+const getDisplayName = (user) => {
+    if (!user) return 'Người dùng';
+    if (typeof user === 'string') return user;
+
+    const fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim();
+    return fullName || user.name || user.email || user.phone || 'Người dùng';
+};
+
+const formatChatTime = (dateString) => {
+    if (!dateString) return '';
+
+    const date = new Date(dateString);
+    const now = new Date();
+
+    if (Number.isNaN(date.getTime())) return '';
+
+    const isSameDay =
+        date.getDate() === now.getDate() &&
+        date.getMonth() === now.getMonth() &&
+        date.getFullYear() === now.getFullYear();
+
+    if (isSameDay) {
+        return date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    return date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+};
 
 export default function ChatListScreen({ navigation }) {
+    const { user, token } = useAuth();
+    const [conversations, setConversations] = useState([]);
+    const [userCache, setUserCache] = useState({});
+    const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+
+    const currentUserId = useMemo(() => getId(user), [user]);
+
+    const loadConversations = useCallback(async (isRefresh = false) => {
+        try {
+            if (isRefresh) {
+                setRefreshing(true);
+            } else {
+                setLoading(true);
+            }
+
+            const response = await MessageAPI.getConversations();
+            const normalized = response?.conversations || [];
+
+            const sorted = [...normalized].sort(
+                (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)
+            );
+
+            setConversations(sorted);
+
+            // Collect all participant IDs that are plain strings (not populated objects)
+            const idsToFetch = [...new Set(
+                sorted.flatMap((conv) =>
+                    (conv.participants || [])
+                        .filter((p) => typeof p === 'string' || (typeof p === 'object' && !p?.firstName && !p?.name))
+                        .map((p) => getId(p))
+                        .filter(Boolean)
+                )
+            )];
+
+            if (idsToFetch.length > 0) {
+                const results = await Promise.allSettled(
+                    idsToFetch.map((id) => MessageAPI.getUserById(id).then((u) => ({ id, user: u })))
+                );
+                const cache = {};
+                results.forEach((r) => {
+                    if (r.status === 'fulfilled' && r.value?.user) {
+                        cache[r.value.id] = r.value.user;
+                    }
+                });
+                setUserCache((prev) => ({ ...prev, ...cache }));
+            }
+        } catch (error) {
+            console.error('❌ Load conversations error:', error);
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
+    }, []);
+
+    useFocusEffect(
+        useCallback(() => {
+            loadConversations();
+        }, [loadConversations])
+    );
+
+    useEffect(() => {
+        let isMounted = true;
+        let newMessageHandler;
+
+        const setupSocket = async () => {
+            try {
+                await SocketService.connect({ token, userId: currentUserId });
+
+                newMessageHandler = () => {
+                    if (isMounted) {
+                        loadConversations(true);
+                    }
+                };
+
+                SocketService.on('message:new', newMessageHandler);
+                SocketService.on('new-message', newMessageHandler);
+                SocketService.on('newMessage', newMessageHandler);
+                SocketService.on('conversation:updated', newMessageHandler);
+                SocketService.on('messages-read', newMessageHandler);
+            } catch (error) {
+                console.error('❌ Connect socket error (chat list):', error);
+            }
+        };
+
+        setupSocket();
+
+        return () => {
+            isMounted = false;
+            if (newMessageHandler) {
+                SocketService.off('message:new', newMessageHandler);
+                SocketService.off('new-message', newMessageHandler);
+                SocketService.off('newMessage', newMessageHandler);
+                SocketService.off('conversation:updated', newMessageHandler);
+                SocketService.off('messages-read', newMessageHandler);
+            }
+        };
+    }, [token, currentUserId, loadConversations]);
+
+    const renderChatItem = ({ item }) => {
+        const participants = Array.isArray(item.participants) ? item.participants : [];
+        const otherParticipant =
+            participants.find((participant) => getId(participant) !== currentUserId) ||
+            participants[0] ||
+            null;
+
+        const otherParticipantId = getId(otherParticipant);
+        // Prefer fetched user data from cache for full name
+        const cachedUser = userCache[otherParticipantId];
+        const resolvedParticipant = cachedUser || otherParticipant;
+        const displayName = item.title || getDisplayName(resolvedParticipant);
+        const avatar = resolvedParticipant?.avatar || resolvedParticipant?.profileImage || resolvedParticipant?.photoURL;
+        const unreadCount = Number(item.unreadCount || 0);
+
+        return (
+            <TouchableOpacity
+                style={styles.chatItem}
+                onPress={() =>
+                    navigation.navigate('ChatDetail', {
+                        conversationId: item.id,
+                        user: displayName,
+                        recipientId: getId(otherParticipant),
+                    })
+                }
+            >
+                <Image
+                    source={{ uri: avatar || 'https://via.placeholder.com/50' }}
+                    style={styles.avatar}
+                />
+                <View style={styles.content}>
+                    <View style={styles.row}>
+                        <Text style={styles.name} numberOfLines={1}>{displayName}</Text>
+                        <Text style={styles.time}>{formatChatTime(item.lastMessage?.createdAt || item.updatedAt)}</Text>
+                    </View>
+                    <View style={styles.row}>
+                        <Text style={styles.message} numberOfLines={1}>
+                            {item.lastMessage?.content || 'Chưa có tin nhắn'}
+                        </Text>
+                        {unreadCount > 0 && (
+                            <View style={styles.unreadBadge}>
+                                <Text style={styles.unreadText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+                            </View>
+                        )}
+                    </View>
+                </View>
+            </TouchableOpacity>
+        );
+    };
+
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
                 <Text style={styles.title}>Tin nhắn</Text>
             </View>
 
-            <FlatList
-                data={MOCK_CHATS}
-                keyExtractor={item => item.id}
-                renderItem={({ item }) => (
-                    <TouchableOpacity
-                        style={styles.chatItem}
-                        onPress={() => navigation.navigate('ChatDetail', { user: item.user })}
-                    >
-                        <Image source={{ uri: item.avatar }} style={styles.avatar} />
-                        <View style={styles.content}>
-                            <View style={styles.row}>
-                                <Text style={styles.name}>{item.user}</Text>
-                                <Text style={styles.time}>{item.time}</Text>
-                            </View>
-                            <Text style={styles.message} numberOfLines={1}>{item.lastMessage}</Text>
+            {loading ? (
+                <View style={styles.centerState}>
+                    <ActivityIndicator size="large" color={COLORS.primary} />
+                    <Text style={styles.stateText}>Đang tải hội thoại...</Text>
+                </View>
+            ) : (
+                <FlatList
+                    data={conversations}
+                    keyExtractor={(item) => item.id}
+                    renderItem={renderChatItem}
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={refreshing}
+                            onRefresh={() => loadConversations(true)}
+                            tintColor={COLORS.primary}
+                        />
+                    }
+                    ListEmptyComponent={
+                        <View style={styles.centerState}>
+                            <Text style={styles.stateText}>Chưa có cuộc trò chuyện nào</Text>
+                            <Text style={styles.stateSubText}>Bạn có thể bắt đầu nhắn tin từ chi tiết kiểm định hoặc sản phẩm.</Text>
                         </View>
-                    </TouchableOpacity>
-                )}
-            />
+                    }
+                />
+            )}
         </SafeAreaView>
     );
 }
@@ -88,5 +282,38 @@ const styles = StyleSheet.create({
     message: {
         color: COLORS.secondary,
         fontSize: 14,
+        flex: 1,
+        marginRight: 8,
+    },
+    unreadBadge: {
+        minWidth: 20,
+        height: 20,
+        borderRadius: 10,
+        backgroundColor: COLORS.primary,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 6,
+    },
+    unreadText: {
+        color: COLORS.white,
+        fontSize: 11,
+        fontWeight: '700',
+    },
+    centerState: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 24,
+    },
+    stateText: {
+        marginTop: 12,
+        fontSize: 16,
+        color: COLORS.text,
+        fontWeight: '600',
+    },
+    stateSubText: {
+        marginTop: 8,
+        textAlign: 'center',
+        color: COLORS.secondary,
     },
 });

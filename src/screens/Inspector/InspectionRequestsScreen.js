@@ -56,11 +56,7 @@ const InspectionRequestsScreen = ({ navigation, route }) => {
         const status = statusMap[activeTab] || activeTab;
         const response = await InspectorAPI.getMyInspections(status);
         data = response?.data || [];
-      }
-
-      // Log raw API data for debugging
-      console.log('📋 Raw inspection data sample:', JSON.stringify(data[0], null, 2));
-      
+      }      
       // Fetch bicycle details for each inspection
       const transformedData = await Promise.all(
         data.map(async (item) => {
@@ -77,6 +73,18 @@ const InspectionRequestsScreen = ({ navigation, route }) => {
             }
           }
           
+          // Fetch seller info
+          let sellerInfo = null;
+          const sellerId = bicycle?.sellerId || item.sellerId || null;
+          if (sellerId) {
+            try {
+              const sellerResponse = await InspectorAPI.getUserById(sellerId);
+              sellerInfo = sellerResponse?.data || sellerResponse || null;
+            } catch (error) {
+              console.warn(`⚠️ Could not fetch seller ${sellerId}:`, error.message);
+            }
+          }
+
           // Transform data with bicycle info
           return {
             id: item._id,
@@ -84,8 +92,8 @@ const InspectionRequestsScreen = ({ navigation, route }) => {
             bikeModel: bicycle?.specifications?.model || bicycle?.title || `Xe #${item.bicycleId?.slice(-6) || 'N/A'}`,
             bikeBrand: bicycle?.specifications?.brand || 'N/A',
             bikeImage: bicycle?.media?.mainImage || bicycle?.media?.images?.[0] || 'https://bizweb.dktcdn.net/100/412/747/products/xe-dap-dua-magicbros-s600-5.jpg?v=1731484215820',
-            sellerName: 'N/A', // Seller info not included in bicycle response
-            sellerPhone: 'N/A',
+            sellerName: sellerInfo ? `${sellerInfo.firstName || ''} ${sellerInfo.lastName || ''}`.trim() || 'N/A' : 'N/A',
+            sellerPhone: sellerInfo?.phone || 'N/A',
             requestType: item.inspectionType || 'onsite',
             address: bicycle?.location ? 
               `${bicycle.location.address || ''}, ${bicycle.location.district || ''}, ${bicycle.location.city || ''}`.trim() 

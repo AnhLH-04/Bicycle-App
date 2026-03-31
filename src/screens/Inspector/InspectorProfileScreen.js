@@ -138,6 +138,14 @@ const InspectorProfileScreen = ({ navigation }) => {
           <MaterialCommunityIcons name="chevron-right" size={24} color={COLORS.secondary} />
         </TouchableOpacity>
 
+        <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('ChatList')}>
+          <View style={styles.menuLeft}>
+            <MaterialCommunityIcons name="chat-processing" size={24} color={COLORS.primary} />
+            <Text style={styles.menuText}>Tin nhắn</Text>
+          </View>
+          <MaterialCommunityIcons name="chevron-right" size={24} color={COLORS.secondary} />
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.menuItem}>
           <View style={styles.menuLeft}>
             <MaterialCommunityIcons name="cog" size={24} color={COLORS.primary} />
