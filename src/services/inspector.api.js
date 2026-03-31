@@ -16,11 +16,11 @@ const getToken = async () => {
 // Helper function for authenticated API calls
 const authenticatedFetch = async (url, options = {}) => {
   const token = await getToken();
-  
+
   if (!token) {
     throw new Error('No authentication token found. Please login again.');
   }
-
+  
   const headers = {
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${token}`,
@@ -115,6 +115,19 @@ export const InspectorAPI = {
   },
 
   /**
+   * Get inspection report by bicycle ID
+   * GET /api/v1/inspections/bicycle/:bicycleId
+   */
+  getInspectionByBicycleId: async (bicycleId) => {
+    try {
+      const data = await authenticatedFetch(`${API_BASE_URL}/inspections/bicycle/${bicycleId}`);
+      return data;
+    } catch {
+      return null;
+    }
+  },
+
+  /**
    * Complete an inspection with technical checks and verdict
    * PATCH /api/v1/inspections/:id/complete
    * @param {string} inspectionId - The inspection ID
@@ -173,7 +186,7 @@ export const InspectorAPI = {
   addDisputeEvidence: async (disputeId, comparisonNotes) => {
     try {
       console.log(`📤 Adding evidence to dispute ${disputeId}...`);
-      
+
       const data = await authenticatedFetch(
         `${API_BASE_URL}/disputes/${disputeId}/inspector-evidence`,
         {

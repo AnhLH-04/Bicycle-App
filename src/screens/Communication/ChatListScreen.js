@@ -49,6 +49,7 @@ const formatChatTime = (dateString) => {
 export default function ChatListScreen({ navigation }) {
     const { user, token } = useAuth();
     const [conversations, setConversations] = useState([]);
+    const [userCache, setUserCache] = useState({});
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
@@ -70,6 +71,29 @@ export default function ChatListScreen({ navigation }) {
             );
 
             setConversations(sorted);
+
+            // Collect all participant IDs that are plain strings (not populated objects)
+            const idsToFetch = [...new Set(
+                sorted.flatMap((conv) =>
+                    (conv.participants || [])
+                        .filter((p) => typeof p === 'string' || (typeof p === 'object' && !p?.firstName && !p?.name))
+                        .map((p) => getId(p))
+                        .filter(Boolean)
+                )
+            )];
+
+            if (idsToFetch.length > 0) {
+                const results = await Promise.allSettled(
+                    idsToFetch.map((id) => MessageAPI.getUserById(id).then((u) => ({ id, user: u })))
+                );
+                const cache = {};
+                results.forEach((r) => {
+                    if (r.status === 'fulfilled' && r.value?.user) {
+                        cache[r.value.id] = r.value.user;
+                    }
+                });
+                setUserCache((prev) => ({ ...prev, ...cache }));
+            }
         } catch (error) {
             console.error('❌ Load conversations error:', error);
         } finally {
@@ -129,8 +153,12 @@ export default function ChatListScreen({ navigation }) {
             participants[0] ||
             null;
 
-        const displayName = item.title || getDisplayName(otherParticipant);
-        const avatar = otherParticipant?.avatar || otherParticipant?.profileImage || otherParticipant?.photoURL;
+        const otherParticipantId = getId(otherParticipant);
+        // Prefer fetched user data from cache for full name
+        const cachedUser = userCache[otherParticipantId];
+        const resolvedParticipant = cachedUser || otherParticipant;
+        const displayName = item.title || getDisplayName(resolvedParticipant);
+        const avatar = resolvedParticipant?.avatar || resolvedParticipant?.profileImage || resolvedParticipant?.photoURL;
         const unreadCount = Number(item.unreadCount || 0);
 
         return (

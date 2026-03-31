@@ -206,6 +206,15 @@ const includesParticipant = (conversation, targetUserId) => {
 };
 
 export const MessageAPI = {
+  getUserById: async (userId) => {
+    try {
+      const data = await authenticatedFetch(`/users/${userId}`, { method: 'POST' });
+      return data?.data || data || null;
+    } catch {
+      return null;
+    }
+  },
+
   getConversations: async () => {
     const response = await authenticatedFetch('/messages/conversations');
     const dataPayload = extractDataPayload(response);

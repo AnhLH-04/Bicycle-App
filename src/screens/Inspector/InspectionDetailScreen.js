@@ -19,8 +19,8 @@ import InspectorAPI from '../../services/inspector.api';
 import { BicycleAPI } from '../../services/api';
 
 const InspectionDetailScreen = ({ navigation, route }) => {
-  const { inspectionId, inspectionData, isCompleted } = route.params;
-  const [loading, setLoading] = useState(!inspectionData); // Don't load if data is provided
+  const { inspectionId } = route.params;
+  const [loading, setLoading] = useState(true);
   const [inspection, setInspection] = useState({
     id: 'INS-2024-015',
     bikeModel: 'Giant TCR Advanced Pro',
@@ -74,102 +74,22 @@ const InspectionDetailScreen = ({ navigation, route }) => {
     sellerNotes: 'Xe mới đi được 2000km, bảo dưỡng định kỳ. Có hóa đơn mua hàng và sách bảo hành.',
   });
 
-  useEffect(() => { 
+  useEffect(() => {
     const loadData = () => {
-      if (inspectionData && isCompleted) {
-        // Use provided data from my-inspections list
-        transformInspectionData(inspectionData);
-      } else {
-        // Fetch detail from API for pending inspections
-        fetchInspectionDetail();
-      }
+      // Always fetch fresh data from API to ensure bike info and seller are loaded
+      fetchInspectionDetail();
     };
-    
+
     loadData();
-    
+
     // Auto-refresh every 5 seconds
     const refreshInterval = setInterval(() => {
       loadData();
     }, 5000);
-    
+
     // Cleanup interval on unmount
     return () => clearInterval(refreshInterval);
-  }, [inspectionId, inspectionData]);
-
-  const transformInspectionData = async (data) => {
-    try {
-      setLoading(true);
-      let bike = data.bicycle || null;
-      
-      // If bicycle is not populated (only ID), fetch from API
-      if (!bike && data.bicycleId && typeof data.bicycleId === 'string') {
-        try {
-          console.log(`📤 Fetching bicycle ${data.bicycleId} for inspection detail...`);
-          const bicycleResponse = await BicycleAPI.getBicycleById(data.bicycleId);
-          bike = bicycleResponse?.data || null;
-          console.log('✅ Bicycle fetched for inspection detail:', bike?.title);
-        } catch (error) {
-          console.warn('⚠️ Could not fetch bicycle:', error.message);
-        }
-      }
-      // Fetch seller info using sellerId
-      const sellerId = bike?.sellerId || data.sellerId || null;
-      let sellerInfo = null;
-      if (sellerId) {
-        try {
-          const sellerResponse = await InspectorAPI.getUserById(sellerId);
-          sellerInfo = sellerResponse?.data || sellerResponse || null;
-        } catch (error) {
-          console.warn('⚠️ Could not fetch seller:', error.message);
-        }
-      }
-
-      // Transform my-inspections data to UI format
-      setInspection({
-        id: data._id || data.id,
-        bikeModel: bike?.specifications?.model || bike?.title || 'N/A',
-        bikeBrand: bike?.specifications?.brand || 'N/A',
-        bikeCategory: bike?.specifications?.type || 'N/A',
-        bikeYear: bike?.specifications?.year,
-        bikePrice: bike?.price,
-        bikeCondition: bike?.condition?.overall || 'N/A',
-        bikeImages: bike?.media?.images || bike?.media?.photos || data.media?.photos || [],
-        description: bike?.description || '',
-        seller: {
-          id: sellerId,
-          name: sellerInfo ? `${sellerInfo.firstName || ''} ${sellerInfo.lastName || ''}`.trim() || 'N/A' : 'N/A',
-          phone: sellerInfo?.phone || 'N/A',
-          email: sellerInfo?.email || 'N/A',
-          rating: sellerInfo?.reputation?.rating || 0,
-          totalSales: sellerInfo?.reputation?.totalSales || 0,
-        },
-        requestType: data.inspectionType || 'onsite',
-        address: bike?.location ? 
-          `${bike.location.address || bike.location.street || ''}, ${bike.location.district || ''}, ${bike.location.city || ''}`.trim() 
-          : 'N/A',
-        coordinates: bike?.location?.coordinates || { lat: 0, lng: 0 },
-        requestDate: data.createdAt,
-        preferredDate: data.preferredDate,
-        status: data.verdict || 'pending',
-        inspectionFee: data.inspectionFee || 0,
-        isFirstInspection: data.inspectionFee === 0,
-        lastInspectionDate: null,
-        technicalSpecs: bike?.specifications || {},
-        sellerNotes: bike?.notes || '',
-        // Inspection results
-        technicalChecks: data.technicalChecks || null,
-        overallRating: data.overallRating || null,
-        recommendations: data.recommendations || '',
-        verdict: data.verdict || 'pending',
-        validUntil: data.validUntil || null,
-      });
-      // console.log('✅ Transformed inspection data:', inspection);
-    } catch (error) {
-      console.error('❌ Error transforming inspection data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [inspectionId]);
 
   const fetchInspectionDetail = async () => {
     try {
@@ -178,17 +98,18 @@ const InspectionDetailScreen = ({ navigation, route }) => {
       
       if (response?.data) {
         const data = response.data;
+        // bicycleId may be a populated object or a string ID
         let bike = data.bicycle || null;
-        
-        // If bicycle is not populated (only ID), fetch from API
-        if (!bike && data.bicycleId && typeof data.bicycleId === 'string') {
-          try {
-            console.log(`📤 Fetching bicycle ${data.bicycleId} for inspection detail...`);
-            const bicycleResponse = await BicycleAPI.getBicycleById(data.bicycleId);
-            bike = bicycleResponse?.data || null;
-            console.log('✅ Bicycle fetched for inspection detail:', bike?.title);
-          } catch (error) {
-            console.warn('⚠️ Could not fetch bicycle:', error.message);
+        if (!bike && data.bicycleId) {
+          if (typeof data.bicycleId === 'object') {
+            bike = data.bicycleId;
+          } else if (typeof data.bicycleId === 'string') {
+            try {
+              const bicycleResponse = await BicycleAPI.getBicycleById(data.bicycleId);
+              bike = bicycleResponse?.data || null;
+            } catch (error) {
+              console.warn('⚠️ Could not fetch bicycle:', error.message);
+            }
           }
         }
         
@@ -199,6 +120,7 @@ const InspectionDetailScreen = ({ navigation, route }) => {
           try {
             const sellerResponse = await InspectorAPI.getUserById(sellerId);
             sellerInfo = sellerResponse?.data || sellerResponse || null;
+            console.log('✅ Seller info fetched:', sellerInfo);
           } catch (error) {
             console.warn('⚠️ Could not fetch seller:', error.message);
           }
@@ -207,18 +129,19 @@ const InspectionDetailScreen = ({ navigation, route }) => {
         // Transform API data to match UI
         setInspection({
           id: data._id,
-          bikeTitle: bike?.title || `Xe #${data.bicycleId?.slice(-6) || 'N/A'}`,
-          bikeModel: bike?.specifications?.model || bike?.title || `Xe #${data.bicycleId?.slice(-6) || 'N/A'}`,
+          bikeTitle: bike?.title || 'N/A',
+          bikeModel: bike?.specifications?.model || bike?.title || 'N/A',
           bikeBrand: bike?.specifications?.brand || 'N/A',
           bikeCategory: bike?.specifications?.type || 'N/A',
           bikeYear: bike?.specifications?.year,
           bikePrice: bike?.price,
           bikeCondition: bike?.condition?.overall || 'N/A',
-          bikeImages: bike?.media?.images || bike?.media?.photos || ['https://bizweb.dktcdn.net/100/412/747/products/xe-dap-dua-magicbros-s600-5.jpg?v=1731484215820'],
+          bikeImages: bike?.media?.photos || bike?.media?.images || data.media?.photos || [],
+          inspectionPhotos: data.media?.photos || [],
           description: bike?.description || '',
           seller: {
             id: sellerId,
-            name: sellerInfo?.name || sellerInfo?.fullName || sellerInfo?.username || 'N/A',
+            name: sellerInfo?.firstName + ' ' + sellerInfo?.lastName || 'N/A',
             phone: sellerInfo?.phone || sellerInfo?.phoneNumber || 'N/A',
             email: sellerInfo?.email || 'N/A',
             rating: sellerInfo?.reputation?.rating || 0,
@@ -628,6 +551,22 @@ const InspectionDetailScreen = ({ navigation, route }) => {
           </View>
         )}
 
+        {/* Inspection Photos */}
+        {inspection.inspectionPhotos && inspection.inspectionPhotos.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Ảnh kiểm định</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {inspection.inspectionPhotos.map((photo, index) => (
+                <Image
+                  key={index}
+                  source={{ uri: photo }}
+                  style={{ width: 120, height: 120, borderRadius: 8, marginRight: 8 }}
+                />
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
         {/* Seller Notes */}
         {inspection.sellerNotes && (
           <View style={styles.section}>
@@ -690,6 +629,9 @@ const getStatusColor = (status) => {
     'in-progress': COLORS.primary,
     completed: COLORS.success,
     cancelled: COLORS.error,
+    approved: COLORS.success,
+    approved_with_conditions: COLORS.warning,
+    rejected: COLORS.error,
   };
   return colors[status] || COLORS.gray;
 };
@@ -701,6 +643,9 @@ const getStatusText = (status) => {
     'in-progress': 'Đang kiểm định',
     completed: 'Hoàn thành',
     cancelled: 'Đã hủy',
+    approved: 'Đã phê duyệt',
+    approved_with_conditions: 'Phê duyệt có điều kiện',
+    rejected: 'Từ chối',
   };
   return texts[status] || status;
 };

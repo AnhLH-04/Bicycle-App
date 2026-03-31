@@ -70,22 +70,25 @@ const InspectionHistoryScreen = ({ navigation, route }) => {
         // });
 
         const transformed = inspectionsResponse.data.map(item => {
-          const bicycle = bicyclesMap[item.bicycleId] || {};
-          // const seller = sellersMap[bicycle.sellerId] || {};
-          
+          // bicycleId may be a populated object or a string ID
+          const populatedBike = (typeof item.bicycleId === 'object' && item.bicycleId !== null)
+            ? item.bicycleId : null;
+          const bikeId = populatedBike?._id || item.bicycleId;
+          // Use full bicycle from getAllBicycles (has media) with fallback to populated object
+          const bicycle = bicyclesMap[bikeId] || populatedBike || {};
+
           return {
             id: item._id,
             bikeModel: bicycle.title || 'N/A',
             bikeBrand: bicycle.specifications?.brand || 'N/A',
-            bikeImage: bicycle.media?.photos?.[0] || item.media?.photos?.[0] || 'https://via.placeholder.com/100',
+            // Use bicycle's own photos; fall back to inspector's uploaded photos
+            bikeImage: bicycle.media?.photos?.[0] || bicycle.media?.images?.[0] || item.media?.photos?.[0] || 'https://via.placeholder.com/100',
             inspectionDate: item.createdAt,
-            overallCondition: mapVerdictToCondition(item.verdict),
+            overallCondition: mapRatingToCondition(item.overallRating, item.verdict),
             certificationIssued: item.verdict === 'approved' || item.verdict === 'approved_with_conditions',
             certificationExpiry: item.validUntil,
-            inspectionFee: 0, // Not provided in API response
-            sellerName: bicycle.sellerName || 'N/A',
+            inspectionFee: 0,
             inspectorRating: item.overallRating || 0,
-            reportViews: bicycle.views || 0,
             overallRating: item.overallRating || 0,
             bicycleId: item.bicycleId,
             inspectionType: item.inspectionType,
@@ -94,7 +97,11 @@ const InspectionHistoryScreen = ({ navigation, route }) => {
             recommendations: item.recommendations,
             isPaid: item.isPaid,
             bicyclePrice: bicycle.price || 0,
-            sellerId: bicycle.sellerId,
+            // Pass bicycle object and raw fields for InspectionDetailScreen
+            bicycle: Object.keys(bicycle).length > 0 ? bicycle : null,
+            createdAt: item.createdAt,
+            preferredDate: item.preferredDate,
+            media: item.media,
           };
         });
         
@@ -108,7 +115,7 @@ const InspectionHistoryScreen = ({ navigation, route }) => {
     }
   };
 
-  // Map verdict to condition for display
+  // Map verdict to condition for display (fallback only)
   const mapVerdictToCondition = (verdict) => {
     switch (verdict) {
       case 'approved':
@@ -121,6 +128,15 @@ const InspectionHistoryScreen = ({ navigation, route }) => {
       default:
         return 'fair';
     }
+  };
+
+  // Map overallRating (1-10) back to condition label - more accurate than verdict
+  const mapRatingToCondition = (rating, verdict) => {
+    if (rating >= 9) return 'excellent';
+    if (rating >= 7) return 'good';
+    if (rating >= 5) return 'fair';
+    if (rating > 0) return 'poor';
+    return mapVerdictToCondition(verdict); // fallback if no rating
   };
 
   const onRefresh = async () => {
