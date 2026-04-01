@@ -49,10 +49,11 @@ const InspectorDashboardScreen = ({ navigation }) => {
     try {
       setLoading(true);
       
-      // Fetch profile and pending inspections in parallel
-      const [profileRes, pendingRes] = await Promise.all([
+      // Fetch profile, pending inspections, and open disputes in parallel
+      const [profileRes, pendingRes, disputesRes] = await Promise.all([
         InspectorAPI.getProfile(),
         InspectorAPI.getPendingInspections(),
+        InspectorAPI.getDisputes({ status: 'open' }),
       ]);
 
       if (profileRes?.data) {
@@ -71,6 +72,13 @@ const InspectorDashboardScreen = ({ navigation }) => {
         setStats(prev => ({
           ...prev,
           pendingRequests: pendingRes.data.length || 0,
+        }));
+      }
+
+      if (disputesRes?.data) {
+        setStats(prev => ({
+          ...prev,
+          activeDisputes: disputesRes.data.length || 0,
         }));
       }
 
