@@ -338,6 +338,7 @@ const DisputeResolutionScreen = ({ navigation }) => {
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
+            style={styles.tabScrollView}
             contentContainerStyle={styles.tabScrollContainer}
           >
             {TABS.map((tab) => (
@@ -441,18 +442,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.dark,
   },
+  tabScrollView: {
+    flexGrow: 0,
+    flexShrink: 0,
+  },
   tabScrollContainer: {
     paddingHorizontal: 16,
     paddingVertical: 12,
     gap: 8,
+    alignItems: 'center',
   },
   tab: {
+    height: 36,
     paddingHorizontal: 16,
-    paddingVertical: 8,
     borderRadius: 20,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: COLORS.border,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   activeTab: {
     backgroundColor: COLORS.primary,
@@ -465,7 +473,6 @@ const styles = StyleSheet.create({
   },
   activeTabText: {
     color: '#FFFFFF',
-    fontWeight: '600',
   },
   statsContainer: {
     flexDirection: 'row',
