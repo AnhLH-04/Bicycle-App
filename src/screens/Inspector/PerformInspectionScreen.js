@@ -60,7 +60,7 @@ const PerformInspectionScreen = ({ navigation, route }) => {
     
     // Overall Assessment
     overallCondition: '',
-    estimatedValue: '',
+    // estimatedValue: '',
     recommendationForBuyer: '',
     certificationValid: true,
     certificationExpiry: '',
@@ -523,7 +523,7 @@ const PerformInspectionScreen = ({ navigation, route }) => {
     <View>
       <ConditionSelector section="overall" label="Đánh giá tổng quan" />
       
-      <View style={styles.sectionCard}>
+      {/* <View style={styles.sectionCard}>
         <Text style={styles.sectionLabel}>Giá trị ước tính (VNĐ)</Text>
         <TextInput
           style={styles.input}
@@ -534,7 +534,7 @@ const PerformInspectionScreen = ({ navigation, route }) => {
             setInspectionData((prev) => ({ ...prev, estimatedValue: text }))
           }
         />
-      </View>
+      </View> */}
 
       <View style={styles.sectionCard}>
         <Text style={styles.sectionLabel}>Khuyến nghị cho người mua</Text>
